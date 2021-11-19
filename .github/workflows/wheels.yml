@@ -42,37 +42,34 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        py:
-          - ver: '3.7'
-            release: '3.7.9'  # last Python.org binary release
-            url: https://www.python.org/ftp/python/3.7.9/python-3.7.9-macosx10.9.pkg
-          - ver: '3.8'
-            release: '3.8.10' # last Python.org binary release
-            url: https://www.python.org/ftp/python/3.8.10/python-3.8.10-macosx10.9.pkg
-          - ver: '3.9'
-            release: '3.9.7'
-            url: https://www.python.org/ftp/python/3.9.7/python-3.9.7-macosx10.9.pkg
-          - ver: '3.10'
-            release: '3.10.0'
-            url: https://www.python.org/ftp/python/3.10.0/python-3.10.0post2-macos11.pkg
+        os: [macos-latest]
+        cibw_python: ["cp37-*", "cp38-*", "cp39-*", "cp310-*"]
+        cibw_arch: ["x86_64", "aarch64", "universal2"]
+        exclude:
+#          - os: ubuntu-latest
+#            cibw_arch: universal2
+          - os: macos-latest
+            cibw_arch: aarch64
+          - os: macos-latest
+            cibw_python: "cp37-*"
+            cibw_arch: universal2
     steps:
     - name: Checkout pygit2
       uses: actions/checkout@v2
 
-    - name: Setup python
-      run: |
-        PKG=$(basename "${{ matrix.py.url }}")
-        wget --no-verbose -N "${{ matrix.py.url }}"
-        sudo installer -pkg $PKG -target /
-        export PATH=/Library/Frameworks/Python.framework/Versions/${{ matrix.py.ver }}/bin:$PATH
-        echo "/Library/Frameworks/Python.framework/Versions/${{ matrix.py.ver }}/bin" >> $GITHUB_PATH
-        which python3
-        python3 -VV
-        test "$(python3 -V)" = "Python ${{ matrix.py.release }}"
+    - uses: actions/setup-python@v2
 
-    - name: Build
-      run: |
-        /bin/sh build.sh wheel bundle test
+    - uses: pypa/cibuildwheel@v2.1.1
+      env:
+        CIBW_BUILD_VERBOSITY: 1
+        CIBW_BUILD: ${{ matrix.cibw_python }}
+        CIBW_ARCHS: ${{ matrix.cibw_arch }}
+        # This is needed for now because cffi has no cp310 wheels
+        CIBW_BEFORE_ALL_LINUX: "yum -y install libffi-devel libgit2-devel"
+        CIBW_TEST_EXTRAS: "test"
+        CIBW_TEST_COMMAND: "python {project}/tests/__init__.py"
+        CIBW_TEST_COMMAND_WINDOWS: "python {project}\\tests\\__init__.py"
+        CIBW_TEST_SKIP: "*universal2:arm64"
 
     - name: Save wheel
       uses: actions/upload-artifact@v2
